@@ -1,0 +1,12 @@
+{
+  "name": "github",
+  "displayName": "GitHub 一键登录与同步",
+  "description": "像 Codex/豆包一样一键跳转浏览器登录 GitHub，自动配置本地 Git 凭证与身份，并支持由 AI 自动创建仓库、提交代码迭代并推送到 GitHub。",
+  "version": "1.0.0",
+  "logo": "assets/logo.svg",
+  "suggestedPrompts": [
+    "登录我的 GitHub 账号",
+    "把当前项目推送到我的 GitHub",
+    "查看我的 GitHub 登录状态和当前仓库同步情况"
+  ]
+}
