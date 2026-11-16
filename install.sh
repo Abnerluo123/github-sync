@@ -14,11 +14,11 @@ XDG_CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
 has_harness_markers() {
   local dir="$1"
   [ -d "$dir/skills" ] && return 0
-  for m in mcp_config.json mcp.json config.toml AGENTS.md CLAUDE.md GEMINI.md plugins settings.json; do
+  for m in mcp_config.json mcp.json AGENTS.md CLAUDE.md GEMINI.md; do
     [ -e "$dir/$m" ] && return 0
   done
   case "$(basename "$dir")" in
-    .agents|.dsh|.codex|.claude|.cursor|.windsurf|.cline|.roo|.qoder|.qoder-cn|.zcode|.opencode|.opencode2dsh|opencode)
+    .agents|.antigravity|.dsh|.codex|.claude|.cursor|.windsurf|.cline|.roo|.qoder|.qoder-cn|.zcode|.opencode|.opencode2dsh|opencode)
       return 0
       ;;
   esac

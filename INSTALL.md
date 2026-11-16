@@ -22,7 +22,8 @@
 
 **Harness 判定特征**（满足其一即可视为有效的 Agent 配置目录）：
 - 目录下已存在 `skills/` 子目录；
-- 目录下存在 Agent 配置/规则/插件标记：`mcp_config.json`、`mcp.json`、`config.toml`、`AGENTS.md`、`CLAUDE.md`、`GEMINI.md`、`plugins/` 或 `settings.json`。
+- 目录下存在 AI Agent 专属配置或规则标记：`mcp_config.json`、`mcp.json`、`AGENTS.md`、`CLAUDE.md`、`GEMINI.md`；
+- 属于常见 AI 编程 Agent 配置目录名（如 `.agents`、`.antigravity`、`.dsh`、`.codex`、`.claude`、`.cursor`、`.windsurf`、`.cline`、`.roo`、`.qoder`、`.zcode`、`opencode` 等）。
 
 ---
 

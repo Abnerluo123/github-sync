@@ -8,4 +8,4 @@
 
 **交互原则**：
 - 默认始终采用一键跳转浏览器 OAuth 登录流程（`-Action login`），**不要**要求用户手动到网页生成并粘贴 Personal Access Token（PAT），除非用户主动明确提出要使用 PAT 或配置 GitHub MCP Server。
-- 对于需要联网、安装软件或弹出浏览器授权窗口的操作（`setup`、`login`、`sync`），必须使用 `BypassSandbox: true` 运行命令。
+- 对于需要联网、安装软件或弹出浏览器授权窗口的操作（`setup`、`login`、`sync`），请在允许联网/宿主机权限下运行命令（由用户确认授权）。

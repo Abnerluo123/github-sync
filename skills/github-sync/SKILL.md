@@ -30,7 +30,7 @@ metadata:
 
 若当前运行环境启用了命令沙盒：
 - **`-Action status`**：仅做本地探测与状态输出，可在默认沙盒中执行。
-- **`-Action setup` / `login` / `sync`**：需要联网、`winget` 安装软件、拉起交互窗口与浏览器完成 OAuth 授权，或向 GitHub 创建仓库与推送代码，**必须使用非沙盒/联网权限执行**（例如设置 `BypassSandbox: true`）。
+- **`-Action setup` / `login` / `sync`**：需要联网、`winget` 安装软件、拉起交互窗口与浏览器完成 OAuth 授权，或向 GitHub 创建仓库与推送代码，**请在联网/宿主机权限下运行（若沙盒阻断，提请用户授权执行）**。
 
 ---
 

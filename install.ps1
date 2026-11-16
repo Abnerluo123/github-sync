@@ -56,21 +56,16 @@ function Test-HarnessDirectory {
         return $true
     }
 
-    $strongMarkers = @('mcp_config.json', 'mcp.json', 'config.toml', 'AGENTS.md', 'CLAUDE.md', 'GEMINI.md', 'plugins')
+    $strongMarkers = @('mcp_config.json', 'mcp.json', 'AGENTS.md', 'CLAUDE.md', 'GEMINI.md')
     foreach ($marker in $strongMarkers) {
         if (Test-Path -LiteralPath (Join-Path $DirPath $marker)) {
             return $true
         }
     }
 
-    if (-not $StrictAppData) {
-        if (Test-Path -LiteralPath (Join-Path $DirPath 'settings.json')) {
-            return $true
-        }
-        $knownNames = @('.agents', '.dsh', '.codex', '.claude', '.cursor', '.windsurf', '.cline', '.roo', '.qoder', '.qoder-cn', '.zcode', '.opencode', '.opencode2dsh', 'opencode')
-        if ($knownNames -contains $name.ToLowerInvariant()) {
-            return $true
-        }
+    $knownNames = @('.agents', '.antigravity', '.dsh', '.codex', '.claude', '.cursor', '.windsurf', '.cline', '.roo', '.qoder', '.qoder-cn', '.zcode', '.opencode', '.opencode2dsh', 'opencode')
+    if ($knownNames -contains $name.ToLowerInvariant()) {
+        return $true
     }
 
     return $false
