@@ -1,6 +1,6 @@
-# GitHub 插件使用规范
+# GitHub Sync 使用规范
 
-当用户提出以下任一需求时，请立即激活 `github` 技能（位于 `$HOME/.gemini/config/plugins/github/skills/github/SKILL.md` 或通用技能目录 `~/.agents/skills/github/SKILL.md`）并优先调用其脚本 `$HOME/.gemini/config/plugins/github/skills/github/scripts/github-cli.ps1`（或技能目录下的 `scripts/github-cli.ps1`）完成操作：
+当用户提出以下任一需求时，请立即激活 `github-sync` 技能（位于 `$HOME/.gemini/config/plugins/github-sync/skills/github-sync/SKILL.md` 或通用技能目录 `~/.agents/skills/github-sync/SKILL.md`）并优先调用其脚本 `$HOME/.gemini/config/plugins/github-sync/skills/github-sync/scripts/github-cli.ps1`（或技能目录下的 `scripts/github-cli.ps1`）完成操作：
 - 登录或绑定 GitHub 账号（如“登录 GitHub”、“连接我的 GitHub”）
 - 查看 GitHub 登录状态或当前项目仓库同步状态
 - 在 GitHub 创建远程仓库，或将本地项目初始化、提交并推送到 GitHub

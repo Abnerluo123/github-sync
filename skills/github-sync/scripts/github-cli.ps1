@@ -21,6 +21,59 @@ if ($PSVersionTable.PSVersion.Major -ge 5) {
     $OutputEncoding = [System.Text.Encoding]::UTF8
 }
 
+$script:HomeRoot = if (-not [string]::IsNullOrWhiteSpace($env:USERPROFILE)) { $env:USERPROFILE } else { $HOME }
+$script:SharedConfigPath = Join-Path $script:HomeRoot '.agents\github-sync\config.json'
+
+function Get-DefaultSharedConfig {
+    return [ordered]@{
+        gitPath           = $null
+        ghPath            = $null
+        defaultVisibility = 'private'
+        defaultBranch     = 'main'
+        ghAccount         = $null
+        gitUserName       = $null
+        gitUserEmail      = $null
+        updatedAt         = $null
+    }
+}
+
+function Read-SharedConfig {
+    $cfg = Get-DefaultSharedConfig
+    if (Test-Path -LiteralPath $script:SharedConfigPath) {
+        try {
+            $raw = Get-Content -LiteralPath $script:SharedConfigPath -Raw -Encoding UTF8
+            if (-not [string]::IsNullOrWhiteSpace($raw)) {
+                $parsed = $raw | ConvertFrom-Json
+                foreach ($key in @('gitPath', 'ghPath', 'defaultVisibility', 'defaultBranch', 'ghAccount', 'gitUserName', 'gitUserEmail', 'updatedAt')) {
+                    $prop = $parsed.PSObject.Properties[$key]
+                    if ($prop -and -not [string]::IsNullOrWhiteSpace([string]$prop.Value)) {
+                        $cfg[$key] = $prop.Value
+                    }
+                }
+            }
+        } catch {
+            # Ignore malformed config and fall back to defaults
+        }
+    }
+    return $cfg
+}
+
+function Save-SharedConfig {
+    param([hashtable]$Config)
+
+    $Config['updatedAt'] = (Get-Date).ToString('o')
+    $parent = Split-Path -Parent $script:SharedConfigPath
+    try {
+        if (-not (Test-Path -LiteralPath $parent)) {
+            New-Item -ItemType Directory -Path $parent -Force | Out-Null
+        }
+        $json = $Config | ConvertTo-Json -Depth 4
+        Set-Content -LiteralPath $script:SharedConfigPath -Value $json -Encoding UTF8
+    } catch {
+        # Best-effort inside read-only sandboxes
+    }
+}
+
 function Add-StandardToolPaths {
     $candidateList = New-Object System.Collections.Generic.List[string]
     foreach ($p in @(
@@ -64,7 +117,23 @@ function Add-StandardToolPaths {
 }
 
 function Get-ToolPath {
-    param([string]$Name)
+    param(
+        [string]$Name,
+        [hashtable]$SharedConfig = $null
+    )
+
+    if (-not $SharedConfig) {
+        $SharedConfig = Read-SharedConfig
+    }
+
+    $cacheKey = if ($Name -eq 'git') { 'gitPath' } elseif ($Name -eq 'gh') { 'ghPath' } else { $null }
+    if ($cacheKey -and -not [string]::IsNullOrWhiteSpace([string]$SharedConfig[$cacheKey])) {
+        $cached = [string]$SharedConfig[$cacheKey]
+        if (Test-Path -LiteralPath $cached) {
+            return $cached
+        }
+    }
+
     $cmd = Get-Command $Name -ErrorAction SilentlyContinue
     if ($cmd) {
         return $cmd.Source
@@ -72,8 +141,28 @@ function Get-ToolPath {
     return $null
 }
 
+function Update-SharedConfigState {
+    param(
+        [string]$GitPath,
+        [string]$GhPath,
+        [string]$GhAccount = $null,
+        [string]$GitUserName = $null,
+        [string]$GitUserEmail = $null
+    )
+
+    $cfg = Read-SharedConfig
+    if (-not [string]::IsNullOrWhiteSpace($GitPath)) { $cfg['gitPath'] = $GitPath }
+    if (-not [string]::IsNullOrWhiteSpace($GhPath)) { $cfg['ghPath'] = $GhPath }
+    if (-not [string]::IsNullOrWhiteSpace($GhAccount)) { $cfg['ghAccount'] = $GhAccount }
+    if (-not [string]::IsNullOrWhiteSpace($GitUserName)) { $cfg['gitUserName'] = $GitUserName }
+    if (-not [string]::IsNullOrWhiteSpace($GitUserEmail)) { $cfg['gitUserEmail'] = $GitUserEmail }
+    Save-SharedConfig -Config $cfg
+    return $cfg
+}
+
 function Test-GhAuthenticated {
-    $ghPath = Get-ToolPath -Name 'gh'
+    $cfg = Read-SharedConfig
+    $ghPath = Get-ToolPath -Name 'gh' -SharedConfig $cfg
     if (-not $ghPath) {
         return $false
     }
@@ -92,8 +181,9 @@ function Test-GhAuthenticated {
 }
 
 function Sync-GitIdentity {
-    $gitPath = Get-ToolPath -Name 'git'
-    $ghPath = Get-ToolPath -Name 'gh'
+    $cfg = Read-SharedConfig
+    $gitPath = Get-ToolPath -Name 'git' -SharedConfig $cfg
+    $ghPath = Get-ToolPath -Name 'gh' -SharedConfig $cfg
     if (-not $gitPath -or -not $ghPath) {
         return $null
     }
@@ -132,18 +222,23 @@ function Sync-GitIdentity {
         }
     }
 
+    $finalName = ((& $gitPath config --global user.name 2>$null) -join '').Trim()
+    $finalEmail = ((& $gitPath config --global user.email 2>$null) -join '').Trim()
+    $null = Update-SharedConfigState -GitPath $gitPath -GhPath $ghPath -GhAccount $user.login -GitUserName $finalName -GitUserEmail $finalEmail
+
     return [PSCustomObject]@{
         login    = $user.login
-        gitName  = (& $gitPath config --global user.name 2>$null)
-        gitEmail = (& $gitPath config --global user.email 2>$null)
+        gitName  = $finalName
+        gitEmail = $finalEmail
     }
 }
 
 function Invoke-Status {
     Add-StandardToolPaths
+    $cfg = Read-SharedConfig
 
-    $gitPath = Get-ToolPath -Name 'git'
-    $ghPath = Get-ToolPath -Name 'gh'
+    $gitPath = Get-ToolPath -Name 'git' -SharedConfig $cfg
+    $ghPath = Get-ToolPath -Name 'gh' -SharedConfig $cfg
 
     $gitVersion = $null
     if ($gitPath) {
@@ -179,9 +274,11 @@ function Invoke-Status {
     $gitUserName = $null
     $gitUserEmail = $null
     if ($gitPath) {
-        $gitUserName = (& $gitPath config --global user.name 2>$null)
-        $gitUserEmail = (& $gitPath config --global user.email 2>$null)
+        $gitUserName = ((& $gitPath config --global user.name 2>$null) -join '').Trim()
+        $gitUserEmail = ((& $gitPath config --global user.email 2>$null) -join '').Trim()
     }
+
+    $null = Update-SharedConfigState -GitPath $gitPath -GhPath $ghPath -GhAccount $ghAccount -GitUserName $gitUserName -GitUserEmail $gitUserEmail
 
     $resolvedRepoPath = $RepoPath
     if (Test-Path -LiteralPath $RepoPath) {
@@ -226,6 +323,7 @@ function Invoke-Status {
         ghAuthDetails    = $ghAuthDetails
         gitUserName      = $gitUserName
         gitUserEmail     = $gitUserEmail
+        sharedConfigPath = $script:SharedConfigPath
         repoPath         = $resolvedRepoPath
         isGitRepo        = $isGitRepo
         branch           = $branch
@@ -238,12 +336,13 @@ function Invoke-Status {
 
 function Invoke-Setup {
     Add-StandardToolPaths
+    $cfg = Read-SharedConfig
 
-    $gitPath = Get-ToolPath -Name 'git'
-    $ghPath = Get-ToolPath -Name 'gh'
+    $gitPath = Get-ToolPath -Name 'git' -SharedConfig $cfg
+    $ghPath = Get-ToolPath -Name 'gh' -SharedConfig $cfg
 
     if (-not $gitPath -or -not $ghPath) {
-        $wingetPath = Get-ToolPath -Name 'winget'
+        $wingetPath = Get-ToolPath -Name 'winget' -SharedConfig $cfg
         if (-not $wingetPath) {
             throw '未找到 winget，请手动安装 Git (https://git-scm.com/) 和 GitHub CLI (https://cli.github.com/)。'
         }
@@ -265,8 +364,8 @@ function Invoke-Setup {
         }
 
         Add-StandardToolPaths
-        $gitPath = Get-ToolPath -Name 'git'
-        $ghPath = Get-ToolPath -Name 'gh'
+        $gitPath = Get-ToolPath -Name 'git' -SharedConfig $cfg
+        $ghPath = Get-ToolPath -Name 'gh' -SharedConfig $cfg
     }
 
     if (-not $gitPath) {
@@ -276,18 +375,23 @@ function Invoke-Setup {
         throw 'GitHub CLI 安装后仍未在标准路径中找到 gh.exe，请重启终端或检查安装路径。'
     }
 
+    $null = Update-SharedConfigState -GitPath $gitPath -GhPath $ghPath
+
     Write-Host "Git 已就绪: $(& $gitPath --version)"
     Write-Host "GitHub CLI 已就绪: $((& $ghPath --version | Select-Object -First 1))"
 }
 
 function Invoke-Login {
     Add-StandardToolPaths
+    $cfg = Read-SharedConfig
 
-    if (-not (Get-ToolPath -Name 'git') -or -not (Get-ToolPath -Name 'gh')) {
+    if (-not (Get-ToolPath -Name 'git' -SharedConfig $cfg) -or -not (Get-ToolPath -Name 'gh' -SharedConfig $cfg)) {
         Invoke-Setup
+        $cfg = Read-SharedConfig
     }
 
-    $ghPath = Get-ToolPath -Name 'gh'
+    $gitPath = Get-ToolPath -Name 'git' -SharedConfig $cfg
+    $ghPath = Get-ToolPath -Name 'gh' -SharedConfig $cfg
     $alreadyLoggedIn = Test-GhAuthenticated
 
     if (-not $alreadyLoggedIn -or $Force) {
@@ -313,22 +417,30 @@ function Invoke-Login {
         Write-Host "登录账号: $($identity.login)"
         Write-Host "Git user.name: $($identity.gitName)"
         Write-Host "Git user.email: $($identity.gitEmail)"
+    } else {
+        $null = Update-SharedConfigState -GitPath $gitPath -GhPath $ghPath
     }
+    Write-Host "共享配置文件: $script:SharedConfigPath"
 }
 
 function Invoke-Sync {
-    Add-StandardToolPaths
+    param([bool]$VisibilityExplicit = $false)
 
-    if (-not (Get-ToolPath -Name 'git') -or -not (Get-ToolPath -Name 'gh')) {
+    Add-StandardToolPaths
+    $cfg = Read-SharedConfig
+
+    if (-not (Get-ToolPath -Name 'git' -SharedConfig $cfg) -or -not (Get-ToolPath -Name 'gh' -SharedConfig $cfg)) {
         Invoke-Setup
+        $cfg = Read-SharedConfig
     }
 
     if (-not (Test-GhAuthenticated)) {
         Invoke-Login
+        $cfg = Read-SharedConfig
     }
 
-    $gitPath = Get-ToolPath -Name 'git'
-    $ghPath = Get-ToolPath -Name 'gh'
+    $gitPath = Get-ToolPath -Name 'git' -SharedConfig $cfg
+    $ghPath = Get-ToolPath -Name 'gh' -SharedConfig $cfg
 
     & $ghPath auth setup-git --hostname github.com
     if ($LASTEXITCODE -ne 0) {
@@ -336,10 +448,25 @@ function Invoke-Sync {
     }
 
     $null = Sync-GitIdentity
-    $gitName = (& $gitPath config --global user.name 2>$null)
-    $gitEmail = (& $gitPath config --global user.email 2>$null)
+    $cfg = Read-SharedConfig
+    $gitName = ((& $gitPath config --global user.name 2>$null) -join '').Trim()
+    $gitEmail = ((& $gitPath config --global user.email 2>$null) -join '').Trim()
     if ([string]::IsNullOrWhiteSpace($gitName) -or [string]::IsNullOrWhiteSpace($gitEmail)) {
         throw 'Git 全局身份 (user.name / user.email) 未设置，请先运行登录或手动设置。'
+    }
+
+    $effectiveVisibility = if ($VisibilityExplicit) {
+        $Visibility
+    } elseif ($cfg['defaultVisibility'] -in @('private', 'public')) {
+        $cfg['defaultVisibility']
+    } else {
+        'private'
+    }
+
+    $effectiveBranch = if (-not [string]::IsNullOrWhiteSpace([string]$cfg['defaultBranch'])) {
+        [string]$cfg['defaultBranch']
+    } else {
+        'main'
     }
 
     if (-not (Test-Path -LiteralPath $RepoPath)) {
@@ -356,8 +483,8 @@ function Invoke-Sync {
         $ErrorActionPreference = $prevPref
 
         if ($insideExit -ne 0 -or ($inside -join '').Trim() -ne 'true') {
-            Write-Host "正在初始化 Git 仓库 (main 分支): $resolvedRepoPath"
-            & $gitPath init -b main
+            Write-Host "正在初始化 Git 仓库 ($effectiveBranch 分支): $resolvedRepoPath"
+            & $gitPath init -b $effectiveBranch
             if ($LASTEXITCODE -ne 0) {
                 throw "git init 失败，退出码: $LASTEXITCODE"
             }
@@ -401,8 +528,8 @@ function Invoke-Sync {
                 Split-Path -Path $resolvedRepoPath -Leaf
             }
 
-            Write-Host "未检测到 origin 远程仓库，正在创建 GitHub 仓库 ($targetRepoName, $Visibility) 并推送..."
-            $visibilityFlag = "--$Visibility"
+            Write-Host "未检测到 origin 远程仓库，正在创建 GitHub 仓库 ($targetRepoName, $effectiveVisibility) 并推送..."
+            $visibilityFlag = "--$effectiveVisibility"
             & $ghPath repo create $targetRepoName $visibilityFlag --source=. --remote=origin --push
             if ($LASTEXITCODE -ne 0) {
                 throw "创建并推送 GitHub 仓库失败，退出码: $LASTEXITCODE"
@@ -420,10 +547,11 @@ function Invoke-Sync {
         $currentBranch = ((& $gitPath branch --show-current 2>$null) -join '').Trim()
 
         [PSCustomObject]@{
-            repoPath     = $resolvedRepoPath
-            originUrl    = $finalOrigin
-            branch       = $currentBranch
-            latestCommit = $latestCommit
+            repoPath         = $resolvedRepoPath
+            originUrl        = $finalOrigin
+            branch           = $currentBranch
+            latestCommit     = $latestCommit
+            sharedConfigPath = $script:SharedConfigPath
         } | ConvertTo-Json -Depth 3
     } finally {
         Pop-Location
@@ -434,5 +562,5 @@ switch ($Action) {
     'status' { Invoke-Status }
     'setup'  { Invoke-Setup }
     'login'  { Invoke-Login }
-    'sync'   { Invoke-Sync }
+    'sync'   { Invoke-Sync -VisibilityExplicit ($PSBoundParameters.ContainsKey('Visibility')) }
 }

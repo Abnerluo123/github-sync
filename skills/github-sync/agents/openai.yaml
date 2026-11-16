@@ -1,0 +1,5 @@
+interface:
+  display_name: "github-sync"
+  short_description: "GitHub OAuth 浏览器登录、自动配置 Git 身份与凭据、一键建仓与同步推送"
+  brand_color: "#24292F"
+  default_prompt: "使用 $github-sync 登录 GitHub、创建远程仓库或提交并推送当前项目。"

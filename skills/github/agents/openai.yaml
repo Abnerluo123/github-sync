@@ -1,5 +1,0 @@
-interface:
-  display_name: "github"
-  short_description: "One-click GitHub OAuth login, repo creation, and auto commit & push"
-  brand_color: "#24292F"
-  default_prompt: "Use $github to log in to GitHub, create a remote repository, or commit and push project updates."

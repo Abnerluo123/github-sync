@@ -1,8 +1,8 @@
 {
-  "name": "github",
-  "displayName": "GitHub 一键登录与同步",
-  "description": "像 Codex/豆包一样一键跳转浏览器登录 GitHub，自动配置本地 Git 凭证与身份，并支持由 AI 自动创建仓库、提交代码迭代并推送到 GitHub。",
-  "version": "1.0.0",
+  "name": "github-sync",
+  "displayName": "GitHub Sync",
+  "description": "一键跳转浏览器完成 GitHub OAuth 授权登录，自动配置本地 Git 工具、提交身份与 HTTPS 凭据，并支持自动初始化仓库、创建远程仓库、提交代码迭代与同步推送。",
+  "version": "1.2.0",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [
     "登录我的 GitHub 账号",

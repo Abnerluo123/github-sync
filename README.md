@@ -1,48 +1,95 @@
-# GitHub 一键登录与同步（Antigravity 插件 & 多 Agent 通用技能包）
+# GitHub Sync (`github-sync`)
 
-一个可用于 **Antigravity、DSH、OpenCode、Codex、Claude Code** 等主流 AI 编程 Agent 的通用 GitHub 技能包与 Antigravity 原生插件：支持像 Codex / 豆包一样一键跳转浏览器完成 GitHub OAuth 授权登录、自动配置本地 `Git` 与 `GitHub CLI (gh)`、同步 Git 提交身份，并一键完成项目建仓、提交与推送。
+通用的多 Agent GitHub 登录与同步技能包：一键跳转浏览器完成 GitHub OAuth 授权登录，自动配置本地 Git 工具、提交身份与 HTTPS 凭据，并支持自动初始化仓库、创建远程仓库、提交代码迭代与同步推送。
 
-## 核心能力
+## 核心功能
 
-- **环境检测 (`status`)**：自动发现标准路径与 WinGet 安装目录中的 `git` / `gh`，检查 GitHub 登录账号与本地凭据状态，以及目标目录的分支、未提交变更与远程仓库地址。
-- **自动安装 (`setup`)**：若本机尚未安装 `git` 或 `gh`，自动通过 `winget` 安装并刷新当前会话路径，无需重启 IDE/终端即可使用。
-- **浏览器一键 OAuth 登录 (`login`)**：弹出交互终端显示一次性授权码并自动拉起浏览器登录 GitHub，无需手动创建/粘贴 PAT；授权完成后自动运行 `gh auth setup-git` 并根据 GitHub 账号配置全局 `git config user.name` 与 `user.email`。
-- **一键建仓与推送迭代 (`sync`)**：自动执行 `git init -b main`（若未初始化）、`git add -A`、`git commit`，首次推送自动通过 `gh repo create` 创建远程仓库（默认 `private`，可指定 `public`）并推送；后续修改直接增量提交并 `git push`。
-- **多 Agent 通用包装**：提供 `SKILL.md`、`agents/openai.yaml`、PowerShell 脚本（`github-cli.ps1`）与 Bash 包装器（`github-cli.sh`）。
+- **浏览器一键 OAuth 登录 (`login`)**：自动拉起交互终端显示授权码并跳转浏览器完成 GitHub OAuth 授权（无需手动生成/粘贴 PAT），自动执行 `gh auth setup-git` 绑定凭据并配置全局 `user.name` 与 `user.email`。
+- **自动环境探测与安装 (`setup` / `status`)**：自动发现标准路径与 WinGet 包目录中的 `git` 与 `gh`，缺失时自动通过 `winget` 安装并立即生效；实时输出工具、登录账号与项目仓库状态。
+- **一键建仓与迭代推送 (`sync`)**：自动完成 `git init`、暂存变更、提交 Commit，未关联远程仓库时自动通过 `gh repo create` 创建仓库并推送，已有远程仓库时直接 `git push`。
+- **跨 Agent 共享配置**：统一读写系统级 Git / GitHub CLI 凭据与 `~/.agents/github-sync/config.json`，登录一次即可在当前电脑上的所有 Agent 之间共享。
 
-## 一键安装到所有本地 Agent
+---
 
-在仓库根目录运行安装脚本，即可自动将 `github` 技能同步安装到本机已有的 Agent 技能目录中（包括 `~/.agents/skills/github`、`~/.dsh/skills/github`、`~/.config/opencode/skills/github`、`~/.codex/skills/github`、`~/.claude/skills/github` 及 Antigravity 插件/技能目录）：
+## 安装方式
 
+### 方式一：让 AI Agent 自动探查本机 Harness 目录并安装（推荐）
+
+如果你的电脑里某些 Agent 安装在自定义路径或便携目录中，直接把本仓库地址或本地目录交给任意支持读文件的 Agent，并告诉它：
+
+> “按 `INSTALL.md` 探测我电脑上的所有 Agent Harness 目录，并安装这个 `github-sync` 技能。”
+
+Agent 会按照 [INSTALL.md](INSTALL.md) 主动识别自身加载目录并扫描本机所有 Harness 路径后完成安装。
+
+### 方式二：运行启发式探测脚本安装
+
+Windows（PowerShell）：
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1
 ```
+如需额外指定自定义 Harness 路径或扫描根目录：
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\install.ps1 -TargetDirs "D:\MyAgent" -SearchRoots "D:\Agents"
+```
+
+macOS / Linux / Git Bash：
+```bash
+bash ./install.sh
+```
+
+---
+
+## 共享配置文件 (`~/.agents/github-sync/config.json`)
+
+首次运行任意命令后，脚本会在 `~/.agents/github-sync/config.json` 自动生成并维护全局共享配置：
+
+```json
+{
+  "gitPath": "...",
+  "ghPath": "...",
+  "defaultVisibility": "private",
+  "defaultBranch": "main",
+  "ghAccount": "...",
+  "gitUserName": "...",
+  "gitUserEmail": "...",
+  "updatedAt": "..."
+}
+```
+
+- `gitPath` / `ghPath`：缓存已探测到的 `git` 与 `gh` 可执行文件路径，加速所有 Agent 调用。
+- `defaultVisibility`：首次自动建仓的默认可见性（`"private"` 或 `"public"`）。
+- `defaultBranch`：初始化新仓库时的默认分支名（默认 `"main"`）。
+
+---
 
 ## 目录结构
 
 ```text
 .
-├── plugin.json                        # Antigravity 插件清单
-├── install.ps1                        # 一键分发安装到多 Agent 技能目录
+├── plugin.json                        # 插件清单
+├── INSTALL.md                         # AI Agent 自探查与安装指南
+├── install.ps1                        # Windows 启发式探测与多 Harness 安装脚本
+├── install.sh                         # POSIX / Git Bash 安装脚本
 ├── README.md
 ├── assets/
-│   └── logo.svg                       # 插件图标
+│   └── logo.svg                       # 图标资源
 ├── rules/
-│   └── AGENTS.md                      # Antigravity 插件全局触发规范
+│   └── AGENTS.md                      # 插件触发规范
 └── skills/
-    └── github/
-        ├── SKILL.md                   # 跨 Agent 通用技能说明
+    └── github-sync/
+        ├── SKILL.md                   # 通用技能说明
         ├── agents/
-        │   └── openai.yaml            # OpenCode / DSH / Codex 元数据配置
+        │   └── openai.yaml            # 技能接口元数据
         └── scripts/
             ├── github-cli.ps1         # 核心 PowerShell 自动化脚本
             └── github-cli.sh          # Bash / Git Bash 兼容包装脚本
 ```
 
-## 常见指令示例
+---
 
-直接对任意已安装该技能的 Agent 说：
+## 常用自然语言指令
+
 - “登录我的 GitHub 账号”
 - “查看我的 GitHub 登录状态和当前仓库同步情况”
 - “把当前项目推送到我的 GitHub”
-- “帮我提交这次代码迭代并推到 GitHub”
+- “提交这次代码修改并同步到 GitHub”
